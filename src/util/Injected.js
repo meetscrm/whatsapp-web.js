@@ -262,9 +262,11 @@ exports.ExposeStore = (moduleRaidStr) => {
             const { message } = proto.deviceSentMessage;
             return message ? func(message) : 'text';
         }
-        if (proto.viewOnceMessage) {
-            const { message } = proto.viewOnceMessage;
-            return message ? func(message) : 'text';
+        if (
+            [1, 2].includes(proto.viewOnceMessage?.message?.buttonsMessage?.headerType) ||
+            proto.viewOnceMessage?.message?.listMessage
+        ) {
+            return 'text';
         }
         
         if (proto.templateMessage?.hydratedTemplate) {
@@ -278,17 +280,6 @@ exports.ExposeStore = (moduleRaidStr) => {
             if (messagePart.some((part) => keys.includes(part))) {
                 return 'media';
             }
-            return 'text';
-        }
-        
-        if (
-            proto.buttonsMessage?.headerType === 1 ||
-            proto.buttonsMessage?.headerType === 2
-        ) {
-            return 'text';
-        }
-
-        if (proto.listMessage) {
             return 'text';
         }
 
