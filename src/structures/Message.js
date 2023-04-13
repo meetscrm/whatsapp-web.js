@@ -5,7 +5,8 @@ const MessageMedia = require('./MessageMedia');
 const Location = require('./Location');
 const Order = require('./Order');
 const Payment = require('./Payment');
-const { MessageTypes } = require('../util/Constants');
+const Reaction = require('./Reaction');
+const {MessageTypes} = require('../util/Constants');
 
 /**
  * Represents a Message on WhatsApp
@@ -108,7 +109,7 @@ class Message extends Base {
          * Indicates if the message is a status update
          * @type {boolean}
          */
-        this.isStatus = data.isStatusV3;
+        this.isStatus = data.isStatusV3 || data.id.remote === 'status@broadcast';
 
         /**
          * Indicates if the message was starred
@@ -133,6 +134,12 @@ class Message extends Base {
          * @type {boolean}
          */
         this.hasQuotedMsg = data.quotedMsg ? true : false;
+
+        /**
+         * Indicates whether there are reactions to the message
+         * @type {boolean}
+         */
+        this.hasReaction = data.hasReaction ? true : false;
 
         /**
          * Indicates the duration of the message in seconds
@@ -403,7 +410,7 @@ class Message extends Base {
             }
 
             try {
-                const decryptedMedia = await (window.Store.DownloadManager.downloadAndMaybeDecrypt || window.Store.DownloadManager.downloadAndDecrypt)({
+                const decryptedMedia = await window.Store.DownloadManager.downloadAndMaybeDecrypt({
                     directPath: msg.directPath,
                     encFilehash: msg.encFilehash,
                     filehash: msg.filehash,
@@ -437,14 +444,15 @@ class Message extends Base {
      */
     async delete(everyone) {
         await this.client.pupPage.evaluate((msgId, everyone) => {
-            let msg = window.Store.Msg.get(msgId);
+            const msg = window.Store.Msg.get(msgId);
+            const chat = msg && (msg.chat || window.Store.Chat.get(msg.id.remote._serialized));
 
             const canRevoke = window.Store.MsgActionChecks.canSenderRevokeMsg(msg) || window.Store.MsgActionChecks.canAdminRevokeMsg(msg);
             if (everyone && canRevoke) {
-                return window.Store.Cmd.sendRevokeMsgs(msg.chat, [msg], { type: msg.id.fromMe ? 'Sender' : 'Admin' });
+                return window.Store.Cmd.sendRevokeMsgs(chat, [msg], { type: msg.id.fromMe ? 'Sender' : 'Admin' });
             }
 
-            return window.Store.Cmd.sendDeleteMsgs(msg.chat, [msg], true);
+            return window.Store.Cmd.sendDeleteMsgs(chat, [msg], true);
         }, this.id._serialized, everyone);
     }
 
@@ -528,6 +536,44 @@ class Message extends Base {
             return new Payment(this.client, msg);
         }
         return undefined;
+    }
+
+
+    /**
+     * Reaction List
+     * @typedef {Object} ReactionList
+     * @property {string} id Original emoji
+     * @property {string} aggregateEmoji aggregate emoji
+     * @property {boolean} hasReactionByMe Flag who sent the reaction
+     * @property {Array<Reaction>} senders Reaction senders, to this message
+     */
+
+    /**
+     * Gets the reactions associated with the given message
+     * @return {Promise<ReactionList[]>}
+     */
+    async getReactions() {
+        if (!this.hasReaction) {
+            return undefined;
+        }
+
+        const reactions = await this.client.pupPage.evaluate(async (msgId) => {
+            const msgReactions = await window.Store.Reactions.find(msgId);
+            if (!msgReactions || !msgReactions.reactions.length) return null;
+            return msgReactions.reactions.serialize();
+        }, this.id._serialized);
+
+        if (!reactions) {
+            return undefined;
+        }
+
+        return reactions.map(reaction => {
+            reaction.senders = reaction.senders.map(sender => {
+                sender.timestamp = Math.round(sender.timestamp / 1000);
+                return new Reaction(this.client, sender);
+            });
+            return reaction;
+        });
     }
 }
 
