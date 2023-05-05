@@ -7,6 +7,7 @@ const client = new Client({
     takeoverTimeoutMs: 20000,
     qrMaxRetries: 4,
     userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+    // proxyAuthentication: { username: 'username', password: 'password' },
     puppeteer: {
         headless: false,
         args: [
@@ -18,6 +19,7 @@ const client = new Client({
             '--no-zygote',
             '--single-process', // <- this one doesn't works in Windows
             '--disable-gpu'
+            //'--proxy-server=proxy-server-that-requires-authentication.example.com'
         ],
     },
 });
