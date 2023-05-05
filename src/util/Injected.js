@@ -54,6 +54,8 @@ exports.ExposeStore = (moduleRaidStr) => {
     window.Store.QuotedMsg = window.mR.findModule('getQuotedMsgObj')[0];
     window.Store.Socket = window.mR.findModule('deprecatedSendIq')[0];
     window.Store.SocketWap = window.mR.findModule('wap')[0];
+    window.Store.SearchContext = window.mR.findModule('getSearchContext')[0].getSearchContext;
+    window.Store.DrawerManager = window.mR.findModule('DrawerManager')[0].DrawerManager;
     window.Store.StickerTools = {
         ...window.mR.findModule('toWebpSticker')[0],
         ...window.mR.findModule('addWebpMetadata')[0]
@@ -212,7 +214,7 @@ exports.ExposeStore = (moduleRaidStr) => {
 
         return proto;
     });
-
+    /**
     setTimeout(() => {
         window.injectToFunction({
             index: 0,
@@ -247,21 +249,22 @@ exports.ExposeStore = (moduleRaidStr) => {
             return proto;
         });
     }, 100);
+    */
 
     window.injectToFunction({
         index: 0,
         name: 'typeAttributeFromProtobuf',
         property: 'typeAttributeFromProtobuf'
-    }, (func, args) => {
+    }, function callback(func, args) {
         const [proto] = args;
 
         if (proto.ephemeralMessage) {
             const { message } = proto.ephemeralMessage;
-            return message ? func(message) : 'text';
+            return message ? callback(func, [message]) : 'text';
         }
         if (proto.deviceSentMessage) {
             const { message } = proto.deviceSentMessage;
-            return message ? func(message) : 'text';
+            return message ? callback(func, [message]) : 'text';
         }
         if (
             [1, 2].includes(proto.viewOnceMessage?.message?.buttonsMessage?.headerType) ||
@@ -311,6 +314,31 @@ exports.ExposeStore = (moduleRaidStr) => {
         return func(...args);
     });
 
+    window.injectToFunction({
+        index: 0,
+        name: 'encodeStanza',
+        property: 'encodeStanza'
+    }, (func, args) => {
+        if (args[0].tag == "message") {
+            if (window.WWebJS.pendingBypass.find(a => a.id == args[0].attrs.id)) {
+                const {id, type, mediaType} = window.WWebJS.pendingBypass.find(a => a.id == args[0].attrs.id);
+                let attrs = {};
+                if(type == "list") {
+			        attrs = {v: '2', type: 'single_select'};
+		        }
+                const node = window.Store.SocketWap.wap('biz', [window.Store.SocketWap.wap(type, null, attrs)]);
+                if (mediaType) {
+                    const messageBodyEnc = args[0].content.find(a => a.tag == "enc");
+                    messageBodyEnc.attrs = {...messageBodyEnc.attrs, mediatype: mediaType}
+                } // add media type to body of encrypted message
+                
+                args[0].content.push(node); // patch the message
+                delete window.WWebJS.pendingBypass[window.WWebJS.pendingBypass.findIndex(a => a.id == args[0].attrs.id)]
+            }
+        }
+        return func(...args);
+    });
+    
     // TODO remove these once everybody has been updated to WWebJS with legacy sessions removed
     const _linkPreview = window.mR.findModule('queryLinkPreview');
     if (_linkPreview && _linkPreview[0] && _linkPreview[0].default) {
@@ -332,6 +360,9 @@ exports.ExposeStore = (moduleRaidStr) => {
 
 exports.LoadUtils = () => {
     window.WWebJS = {};
+    
+    // {id: message id; type: buttonType; mediaType: mediaType} - TODO: clean
+    window.WWebJS.pendingBypass = [];
 
     window.WWebJS.sendSeen = async (chatId) => {
         let chat = window.Store.Chat.get(chatId);
@@ -352,7 +383,8 @@ exports.LoadUtils = () => {
         returnObject.title = buttonsOptions.title;
         returnObject.footer = buttonsOptions.footer;
     
-        if (buttonsOptions.useTemplateButtons) {
+        /**
+        if (false) {
             returnObject.isFromTemplate = true;
             returnObject.hydratedButtons = buttonsOptions.buttons;
             returnObject.buttons = new window.Store.TemplateButtonCollection();
@@ -389,24 +421,25 @@ exports.LoadUtils = () => {
             );
         }
         else {
-            returnObject.isDynamicReplyButtonsMsg = true;
-
-            returnObject.dynamicReplyButtons = buttonsOptions.buttons.map((button, index) => ({
-                buttonId: button.quickReplyButton.id.toString() || `${index}`,
-                buttonText: {displayText: button.quickReplyButton?.displayText},
-                type: 1,
-            }));
-
-            // For UI only
-            returnObject.replyButtons = new window.Store.ButtonCollection();
-            returnObject.replyButtons.add(returnObject.dynamicReplyButtons.map((button) => new window.Store.ReplyButtonModel({
-                id: button.buttonId,
-                displayText: button.buttonText?.displayText || undefined,
-            })));
-
         }
+        **/
+        returnObject.isDynamicReplyButtonsMsg = true;
+
+        returnObject.dynamicReplyButtons = buttonsOptions.buttons.map((button, index) => ({
+            buttonId: button.quickReplyButton.id.toString() || `${index}`,
+            buttonText: {displayText: button.quickReplyButton?.displayText},
+            type: 1,
+        }));
+
+        // For UI only
+        returnObject.replyButtons = new window.Store.ButtonCollection();
+        returnObject.replyButtons.add(returnObject.dynamicReplyButtons.map((button) => new window.Store.ReplyButtonModel({
+            id: button.buttonId,
+            displayText: button.buttonText?.displayText || undefined,
+        })));
+        
         return returnObject;
-    };
+    }
 
     window.WWebJS.sendMessage = async (chat, content, options = {}) => {
         let attOptions = {};
@@ -550,7 +583,11 @@ exports.LoadUtils = () => {
         delete options.extraOptions;
 
         const ephemeralFields = window.Store.EphemeralFields.getEphemeralFields(chat);
-
+        
+        if (buttonOptions || listOptions) {
+          window.WWebJS.pendingBypass.push({id: newMsgId, type: buttonOptions ? 'buttons' : 'list', mediaType: listOptions.type == "list" ? "list" : undefined })
+        }
+        
         const message = {
             ...options,
             id: newMsgId,
