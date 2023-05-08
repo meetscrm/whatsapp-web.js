@@ -54,6 +54,7 @@ exports.ExposeStore = (moduleRaidStr) => {
     window.Store.QuotedMsg = window.mR.findModule('getQuotedMsgObj')[0];
     window.Store.Socket = window.mR.findModule('deprecatedSendIq')[0];
     window.Store.SocketWap = window.mR.findModule('wap')[0];
+    window.Store.SocketSmax = window.mR.findModule('smax')[0].smax;
     window.Store.SearchContext = window.mR.findModule('getSearchContext')[0].getSearchContext;
     window.Store.DrawerManager = window.mR.findModule('DrawerManager')[0].DrawerManager;
     window.Store.StickerTools = {
@@ -214,6 +215,7 @@ exports.ExposeStore = (moduleRaidStr) => {
 
         return proto;
     });
+    
     /**
     setTimeout(() => {
         window.injectToFunction({
@@ -314,29 +316,52 @@ exports.ExposeStore = (moduleRaidStr) => {
         return func(...args);
     });
 
-    window.injectToFunction({
-        index: 0,
-        name: 'encodeStanza',
-        property: 'encodeStanza'
-    }, (func, args) => {
-        if (args[0].tag == "message") {
-            if (window.WWebJS.pendingBypass.find(a => a.id == args[0].attrs.id)) {
-                const {id, type, mediaType} = window.WWebJS.pendingBypass.find(a => a.id == args[0].attrs.id);
-                let attrs = {};
-                if(type == "list") {
-			        attrs = {v: '2', type: 'single_select'};
-		        }
-                const node = window.Store.SocketWap.wap('biz', [window.Store.SocketWap.wap(type, null, attrs)]);
-                if (mediaType) {
-                    const messageBodyEnc = args[0].content.find(a => a.tag == "enc");
-                    messageBodyEnc.attrs = {...messageBodyEnc.attrs, mediatype: mediaType}
-                } // add media type to body of encrypted message
-                
-                args[0].content.push(node); // patch the message
-                delete window.WWebJS.pendingBypass[window.WWebJS.pendingBypass.findIndex(a => a.id == args[0].attrs.id)]
-            }
+    window.injectToFunction({index: 0, name: "createFanoutMsgStanza", property: "createFanoutMsgStanza"}, async (func, ...args) => {
+        const [, proto] = args;
+
+        let buttonNode = null;
+
+        if (proto.buttonsMessage) {
+          buttonNode = window.Store.SocketSmax('buttons');
+        } else if (proto.listMessage) {
+          const listType = proto.listMessage.listType || 0;
+
+          const types = ['unknown', 'single_select', 'product_list'];
+
+          buttonNode = window.Store.SocketSmax('list', {
+            v: '2',
+            type: types[listType],
+          });
         }
-        return func(...args);
+
+        const node = await func(...args);
+
+        if (!buttonNode) {
+          return node;
+        }
+
+        const content = node.content;
+
+        let bizNode = content.find((c) => c.tag === 'biz');
+
+        if (!bizNode) {
+          bizNode = window.Store.SocketSmax('biz', {}, null);
+          content.push(bizNode);
+        }
+
+        let hasButtonNode = false;
+
+        if (Array.isArray(bizNode.content)) {
+          hasButtonNode = !!bizNode.content.find((c) => c.tag === buttonNode?.tag);
+        } else {
+          bizNode.content = [];
+        }
+
+        if (!hasButtonNode) {
+          bizNode.content.push(buttonNode);
+        }
+
+        return node;
     });
     
     // TODO remove these once everybody has been updated to WWebJS with legacy sessions removed
@@ -360,9 +385,6 @@ exports.ExposeStore = (moduleRaidStr) => {
 
 exports.LoadUtils = () => {
     window.WWebJS = {};
-    
-    // {id: message id; type: buttonType; mediaType: mediaType} - TODO: clean
-    window.WWebJS.pendingBypass = [];
 
     window.WWebJS.sendSeen = async (chatId) => {
         let chat = window.Store.Chat.get(chatId);
@@ -583,10 +605,6 @@ exports.LoadUtils = () => {
         delete options.extraOptions;
 
         const ephemeralFields = window.Store.EphemeralFields.getEphemeralFields(chat);
-        
-        if (buttonOptions || listOptions) {
-          window.WWebJS.pendingBypass.push({id: newMsgId, type: buttonOptions ? 'buttons' : 'list', mediaType: listOptions.type == "list" ? "list" : undefined })
-        }
         
         const message = {
             ...options,
