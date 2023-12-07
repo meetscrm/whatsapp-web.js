@@ -758,13 +758,14 @@ class Client extends EventEmitter {
             this.emit(Events.MESSAGE_CIPHERTEXT, new Message(this, msg));
         });
 
-        await page.exposeFunction("onAddMessageRevokeEvent", (msg) => {
+        await page.exposeFunction("onAddMessageRevokeEvent", (msg, newId) => {
             /**
              * Emitted when messages are revoked
              * @event Client#message_revoke
              * @param {Message} message
+             * @param {string} newId
              */
-            this.emit(Events.MESSAGE_REVOKED, new Message(this, msg));
+            this.emit(Events.MESSAGE_REVOKED, new Message(this, msg), newId);
         });
 
         await page.evaluate(() => {
@@ -881,7 +882,10 @@ class Client extends EventEmitter {
                     );
                     if (msg.id && msg.type === "revoked") {
                         msg.id = change.oldKey;
-                        window.onAddMessageRevokeEvent(msg);
+                        window.onAddMessageRevokeEvent(
+                            msg,
+                            change.newKey._serialized
+                        );
                     }
                 }
             });
