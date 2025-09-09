@@ -278,7 +278,7 @@ exports.LoadUtils = () => {
 
         if (typeof chat.id?.isGroup === 'function' && chat.id.isGroup()) {
             from = chat.groupMetadata && chat.groupMetadata.isLidAddressingMode ? lidUser : meUser;
-            participant = window.Store.WidFactory.toUserWidOrThrow(from);
+            participant = window.Store.WidFactory.asUserWidOrThrow(from);
         }
 
         const newMsgKey = new window.Store.MsgKey({
@@ -583,7 +583,7 @@ exports.LoadUtils = () => {
                 chat = null;
             }
         } else {
-            chat = window.Store.Chat.get(chatWid) || (await window.Store.Chat.find(chatWid));
+            chat = window.Store.Chat.get(chatWid) || (await window.Store.FindOrCreateChat.findOrCreateLatestChat(chatWid))?.chat;
         }
 
         return getAsModel && chat
@@ -899,21 +899,17 @@ exports.LoadUtils = () => {
     window.WWebJS.rejectCall = async (peerJid, id) => {
         peerJid = peerJid.split('@')[0] + '@s.whatsapp.net';
         let userId = window.Store.User.getMaybeMePnUser().user + '@s.whatsapp.net';
-        const stanza = window.Store.SocketWap.wap(
-            'call',
-            {
-                id: window.Store.SocketWap.generateId(),
-                from: window.Store.SocketWap.USER_JID(userId),
-                to: window.Store.SocketWap.USER_JID(peerJid),
-            },
-            [
-                window.Store.SocketWap.wap('reject', {
-                    'call-id': id,
-                    'call-creator': window.Store.SocketWap.USER_JID(peerJid),
-                    count: '0',
-                }),
-            ]
-        );
+        const stanza = window.Store.SocketWap.wap('call', {
+            id: window.Store.SocketWap.generateId(),
+            from: window.Store.SocketWap.USER_JID(userId),
+            to: window.Store.SocketWap.USER_JID(peerJid),
+        }, [
+            window.Store.SocketWap.wap('reject', {
+                'call-id': id,
+                'call-creator': window.Store.SocketWap.USER_JID(peerJid),
+                count: '0',
+            })
+        ]);
         await window.Store.Socket.deprecatedCastStanza(stanza);
     };
 
@@ -1270,5 +1266,27 @@ exports.LoadUtils = () => {
     window.WWebJS.getAllStatuses = () => {
         const statuses = window.Store.Status.getModelsArray();
         return statuses.map((status) => window.WWebJS.getStatusModel(status));
+    };
+
+    window.WWebJS.enforceLidAndPnRetrieval = async (userId) => {
+        const wid = window.Store.WidFactory.createWid(userId);
+        const isLid = wid.server === 'lid';
+
+        let lid = isLid ? wid : window.Store.LidUtils.getCurrentLid(wid);
+        let phone = isLid ? window.Store.LidUtils.getPhoneNumber(wid) : wid;
+
+        if (!isLid && !lid) {
+            const queryResult = await window.Store.QueryExist(wid);
+            if (!queryResult?.wid) return {};
+            lid = window.Store.LidUtils.getCurrentLid(wid);
+        }
+
+        if (isLid && !phone) {
+            const queryResult = await window.Store.QueryExist(wid);
+            if (!queryResult?.wid) return {};
+            phone = window.Store.LidUtils.getPhoneNumber(wid);
+        }
+
+        return { lid, phone };
     };
 };
