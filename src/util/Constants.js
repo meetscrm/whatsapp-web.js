@@ -5,7 +5,7 @@ exports.WhatsWebURL = 'https://web.whatsapp.com/';
 exports.DefaultOptions = {
     puppeteer: {
         headless: true,
-        defaultViewport: null
+        defaultViewport: null,
     },
     webVersion: '2.3000.1017054665',
     webVersionCache: {
@@ -15,10 +15,16 @@ exports.DefaultOptions = {
     qrMaxRetries: 0,
     takeoverOnConflict: false,
     takeoverTimeoutMs: 0,
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36',
+    userAgent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36',
     ffmpegPath: 'ffmpeg',
     bypassCSP: false,
-    proxyAuthentication: undefined
+    proxyAuthentication: undefined,
+    pairWithPhoneNumber: {
+        phoneNumber: '',
+        showNotification: true,
+        intervalMs: 180000,
+    },
 };
 
 /**
@@ -29,7 +35,7 @@ exports.DefaultOptions = {
 exports.Status = {
     INITIALIZING: 0,
     AUTHENTICATING: 1,
-    READY: 3
+    READY: 3,
 };
 
 /**
@@ -60,13 +66,15 @@ exports.Events = {
     GROUP_MEMBERSHIP_REQUEST: 'group_membership_request',
     GROUP_UPDATE: 'group_update',
     QR_RECEIVED: 'qr',
+    CODE_RECEIVED: 'code',
     LOADING_SCREEN: 'loading_screen',
     DISCONNECTED: 'disconnected',
     STATE_CHANGED: 'change_state',
     BATTERY_CHANGED: 'change_battery',
     INCOMING_CALL: 'call',
     REMOTE_SESSION_SAVED: 'remote_session_saved',
-    VOTE_UPDATE: 'vote_update'
+    VOTE_UPDATE: 'vote_update',
+    MESSAGE_REVOKED: 'message_revoke',
 };
 
 /**
@@ -111,6 +119,7 @@ exports.MessageTypes = {
     REACTION: 'reaction',
     TEMPLATE_BUTTON_REPLY: 'template_button_reply',
     POLL_CREATION: 'poll_creation',
+    SCHEDULED_EVENT_CREATION: 'scheduled_event_creation',
 };
 
 /**
@@ -138,7 +147,7 @@ exports.GroupNotificationTypes = {
 exports.ChatTypes = {
     SOLO: 'solo',
     GROUP: 'group',
-    UNKNOWN: 'unknown'
+    UNKNOWN: 'unknown',
 };
 
 /**
@@ -158,7 +167,7 @@ exports.WAState = {
     TOS_BLOCK: 'TOS_BLOCK',
     UNLAUNCHED: 'UNLAUNCHED',
     UNPAIRED: 'UNPAIRED',
-    UNPAIRED_IDLE: 'UNPAIRED_IDLE'
+    UNPAIRED_IDLE: 'UNPAIRED_IDLE',
 };
 
 /**
