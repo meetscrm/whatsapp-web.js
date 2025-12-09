@@ -538,7 +538,23 @@ exports.LoadUtils = () => {
                 chat = null;
             }
         } else {
-            chat = window.Store.Chat.get(chatWid) || (await window.Store.FindOrCreateChat.findOrCreateLatestChat(chatWid))?.chat;
+            if (chatId.endsWith('@lid')) {
+                const lidAndPhoneArr = await window.WWebJS.getContactLidAndPhone([chatId]);
+                const realPn = lidAndPhoneArr && lidAndPhoneArr[0] && lidAndPhoneArr[0].pn;
+                if (realPn) {
+                    const allChats = await window.WWebJS.getChats();
+                    const alreadyExists = allChats.some(c => c.id && c.id._serialized === realPn);
+                    if (alreadyExists) {
+                        chat = window.Store.Chat.get(window.Store.WidFactory.createWid(realPn));
+                    } else {
+                        chat = window.Store.Chat.get(chatWid) || (await window.Store.FindOrCreateChat.findOrCreateLatestChat(chatWid))?.chat;
+                    }
+                } else {
+                    chat = window.Store.Chat.get(chatWid) || (await window.Store.FindOrCreateChat.findOrCreateLatestChat(chatWid))?.chat;
+                }
+            } else {
+                chat = window.Store.Chat.get(chatWid) || (await window.Store.FindOrCreateChat.findOrCreateLatestChat(chatWid))?.chat;
+            }
         }
 
         return getAsModel && chat
