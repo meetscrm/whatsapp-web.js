@@ -634,6 +634,16 @@ exports.LoadUtils = () => {
 
         model.lastMessage = null;
         if (model.msgs && model.msgs.length) {
+            if (chat.id && chat.id._serialized.endsWith('@lid')) {
+                const lidAndPhoneArr = await window.WWebJS.getContactLidAndPhone([chat.id._serialized]);
+                const realPn = lidAndPhoneArr && lidAndPhoneArr[0] && lidAndPhoneArr[0].pn;
+                if (realPn) {
+                    const realChat = window.Store.Chat.get(window.Store.WidFactory.createWid(realPn));
+                    const realMsgs = realChat && realChat.msgs ? realChat.msgs.models : [];
+                    const realMsgIds = new Set(realMsgs.map(m => m.id && m.id._serialized));
+                    model.msgs = model.msgs.filter(m => !realMsgIds.has(m.id && m.id._serialized));
+                }
+            }
             const lastMessage = chat.lastReceivedKey
                 ? window.Store.Msg.get(chat.lastReceivedKey._serialized) || (await window.Store.Msg.getMessagesById([chat.lastReceivedKey._serialized]))?.messages?.[0]
                 : null;
