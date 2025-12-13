@@ -22,11 +22,10 @@ exports.LoadUtils = () => {
 
     window.WWebJS.sendMessage = async (chat, content, options = {}) => {
         const isChannel = window.Store.ChatGetters.getIsNewsletter(chat);
-        const isStatus = window.Store.ChatGetters.getIsBroadcast(chat);
 
         let mediaOptions = {};
         if (options.media) {
-            mediaOptions =  options.sendMediaAsSticker && !isChannel && !isStatus
+            mediaOptions =  options.sendMediaAsSticker && !isChannel
                 ? await window.WWebJS.processStickerData(options.media)
                 : await window.WWebJS.processMediaData(options.media, {
                     forceSticker: options.sendMediaAsSticker,
@@ -34,8 +33,7 @@ exports.LoadUtils = () => {
                     forceVoice: options.sendAudioAsVoice,
                     forceDocument: options.sendMediaAsDocument,
                     forceMediaHd: options.sendMediaAsHd,
-                    sendToChannel: isChannel,
-                    sendToStatus: isStatus
+                    sendToChannel: isChannel
                 });
             mediaOptions.caption = options.caption;
             content = options.sendMediaAsSticker ? undefined : mediaOptions.preview;
@@ -248,10 +246,6 @@ exports.LoadUtils = () => {
             participant = window.Store.WidFactory.asUserWidOrThrow(from);
         }
 
-        if (typeof chat.id?.isStatus === 'function' && chat.id.isStatus()) {
-            participant = window.Store.WidFactory.asUserWidOrThrow(from);
-        }
-
         const newMsgKey = new window.Store.MsgKey({
             from: from,
             to: chat.id,
@@ -323,37 +317,6 @@ exports.LoadUtils = () => {
             }
             msg.updateAck(1, true);
             await window.Store.SendChannelMessage.updateNewsletterMsgRecord(msg);
-            return msg;
-        }
-
-        if (isStatus) {
-            const { backgroundColor, fontStyle } = extraOptions;
-            const isMedia = Object.keys(mediaOptions).length > 0;
-            const mediaUpdate = data => window.Store.MediaUpdate(data, mediaOptions);
-            const msg = new window.Store.Msg.modelClass({
-                ...message,
-                author: participant ? participant : null,
-                messageSecret: window.crypto.getRandomValues(new Uint8Array(32)),
-                cannotBeRanked: window.Store.StatusUtils.canCheckStatusRankingPosterGating()
-            });
-
-            // for text only
-            const statusOptions = {
-                color: backgroundColor && window.WWebJS.assertColor(backgroundColor) || 0xff7acca5,
-                font: fontStyle >= 0 && fontStyle <= 7 && fontStyle || 0,
-                text: msg.body
-            };
-
-            await window.Store.StatusUtils[
-                isMedia ?
-                    'sendStatusMediaMsgAction' : 'sendStatusTextMsgAction'
-            ](
-                ...(
-                    isMedia ?
-                        [msg, mediaUpdate] : [statusOptions]
-                )
-            );
-
             return msg;
         }
 
@@ -444,7 +407,7 @@ exports.LoadUtils = () => {
         return stickerInfo;
     };
 
-    window.WWebJS.processMediaData = async (mediaInfo, { forceSticker, forceGif, forceVoice, forceDocument, forceMediaHd, sendToChannel, sendToStatus }) => {
+    window.WWebJS.processMediaData = async (mediaInfo, { forceSticker, forceGif, forceVoice, forceDocument, forceMediaHd, sendToChannel }) => {
         const file = window.WWebJS.mediaInfoToFile(mediaInfo);
         const opaqueData = await window.Store.OpaqueData.createFromData(file, file.type);
         const mediaParams = {
@@ -471,7 +434,7 @@ exports.LoadUtils = () => {
             throw new Error('media-fault: sendToChat filehash undefined');
         }
 
-        if ((forceVoice && mediaData.type === 'ptt') || (sendToStatus && mediaData.type === 'audio')) {
+        if (forceVoice && mediaData.type === 'ptt') {
             const waveform = mediaObject.contentInfo.waveform;
             mediaData.waveform =
                 waveform || await window.WWebJS.generateWaveform(file);
@@ -500,7 +463,7 @@ exports.LoadUtils = () => {
             mimetype: mediaData.mimetype,
             mediaObject,
             mediaType,
-            ...(sendToChannel ? { calculateToken: window.Store.SendChannelMessage.getRandomFilehash() } : {})
+            ...(sendToChannel ? { calculateToken: window.Store.SendChannelMessage.getRandomFilehash } : {})
         };
 
         const uploadedMedia = !sendToChannel
@@ -1201,21 +1164,5 @@ exports.LoadUtils = () => {
         }
 
         return { lid, phone };
-    };
-
-    window.WWebJS.assertColor = (hex) => {
-        let color;
-        if (typeof hex === 'number') {
-            color = hex > 0 ? hex : 0xffffffff + parseInt(hex) + 1;
-        } else if (typeof hex === 'string') {
-            let number = hex.trim().replace('#', '');
-            if (number.length <= 6) {
-                number = 'FF' + number.padStart(6, '0');
-            }
-            color = parseInt(number, 16);
-        } else {
-            throw 'Invalid hex color';
-        }
-        return color;
     };
 };
