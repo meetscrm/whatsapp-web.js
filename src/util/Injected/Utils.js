@@ -676,20 +676,36 @@ exports.LoadUtils = () => {
             res.businessProfile = contact.businessProfile.serialize();
         }
 
-        res.isMe = window.Store.ContactMethods.getIsMe(contact);
-        res.isUser = window.Store.ContactMethods.getIsUser(contact);
-        res.isGroup = window.Store.ContactMethods.getIsGroup(contact);
-        res.isWAContact = window.Store.ContactMethods.getIsWAContact(contact);
-        res.isMyContact = window.Store.ContactMethods.getIsMyContact(contact);
+        const safeCall = (methodName, fallback = null) => {
+            try {
+                if (window.Store.ContactMethods && typeof window.Store.ContactMethods[methodName] === 'function') {
+                    return window.Store.ContactMethods[methodName](contact);
+                }
+                const propName = methodName.replace(/^get/, '').replace(/^./, c => c.toLowerCase());
+                if (contact && contact[propName] !== undefined) {
+                    return contact[propName];
+                }
+                return fallback;
+            } catch (e) {
+                console.warn(`[WWebJS] Erro ao chamar ContactMethods.${methodName}:`, e.message);
+                return fallback;
+            }
+        };
+
+        res.isMe = safeCall('getIsMe', false);
+        res.isUser = safeCall('getIsUser', false);
+        res.isGroup = safeCall('getIsGroup', false);
+        res.isWAContact = safeCall('getIsWAContact', false);
+        res.isMyContact = safeCall('getIsMyContact', contact.isAddressBookContact || false);
         res.isBlocked = contact.isContactBlocked;
-        res.userid = window.Store.ContactMethods.getUserid(contact);
-        res.isEnterprise = window.Store.ContactMethods.getIsEnterprise(contact);
-        res.verifiedName = window.Store.ContactMethods.getVerifiedName(contact);
-        res.verifiedLevel = window.Store.ContactMethods.getVerifiedLevel(contact);
-        res.statusMute = window.Store.ContactMethods.getStatusMute(contact);
-        res.name = window.Store.ContactMethods.getName(contact);
-        res.shortName = window.Store.ContactMethods.getShortName(contact);
-        res.pushname = window.Store.ContactMethods.getPushname(contact);
+        res.userid = safeCall('getUserid', contact.id?._serialized || null);
+        res.isEnterprise = safeCall('getIsEnterprise', false);
+        res.verifiedName = safeCall('getVerifiedName', null);
+        res.verifiedLevel = safeCall('getVerifiedLevel', null);
+        res.statusMute = safeCall('getStatusMute', false);
+        res.name = safeCall('getName', contact.name || null);
+        res.shortName = safeCall('getShortName', contact.shortName || null);
+        res.pushname = safeCall('getPushname', contact.pushname || null);
 
         return res;
     };
