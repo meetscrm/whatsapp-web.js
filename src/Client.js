@@ -469,8 +469,9 @@ class Client extends EventEmitter {
                 if (last_message && msg.id.id === last_message.id.id) {
                     revoked_msg = new Message(this, last_message);
 
-                    if (message.protocolMessageKey)
-                        revoked_msg.id = { ...message.protocolMessageKey };                    
+                    // NOTE: protocolMessageKey is intentionally NOT used to override
+                    // revoked_msg.id here, as it contains the revoke event ID rather
+                    // than the original message ID, causing lookup failures downstream.
                 }
 
                 /**
