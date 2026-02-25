@@ -459,15 +459,13 @@ class Client extends EventEmitter {
             this.emit(Events.MESSAGE_RECEIVED, message);
         });
 
-        const last_message_by_chat = {};
+        let last_message;
 
         await exposeFunctionIfAbsent(this.pupPage, 'onChangeMessageTypeEvent', (msg) => {
 
             if (msg.type === 'revoked') {
                 const message = new Message(this, msg);
                 let revoked_msg;
-                const chatId = msg.id && msg.id.remote ? msg.id.remote : undefined;
-                const last_message = chatId ? last_message_by_chat[chatId] : undefined;
                 if (last_message && msg.id.id === last_message.id.id) {
                     revoked_msg = new Message(this, last_message);
 
@@ -490,8 +488,7 @@ class Client extends EventEmitter {
         await exposeFunctionIfAbsent(this.pupPage, 'onChangeMessageEvent', (msg) => {
 
             if (msg.type !== 'revoked') {
-                const chatId = msg.id && msg.id.remote ? msg.id.remote : undefined;
-                if (chatId) last_message_by_chat[chatId] = msg;
+                last_message = msg;
             }
 
             /**
