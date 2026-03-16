@@ -6,3 +6,4 @@ docs
 .wa-version
 .wwebjs_auth
 .wwebjs_cache
+*.d.ts
