@@ -1230,11 +1230,23 @@ class Client extends EventEmitter {
                 (module, origFunction, ...args) => {
                     window.onReaction(
                         args[0].map((reaction) => {
+                            const normalizeKey = (key) => {
+                                if (!key || typeof key === 'string') return key;
+                                if (key._serialized === undefined && key.$1 !== undefined) {
+                                    key._serialized = key.$1;
+                                }
+                                return key;
+                            };
+
                             const msgKey = reaction.id;
                             const parentMsgKey = reaction.reactionParentKey;
                             const timestamp = reaction.reactionTimestamp / 1000;
                             const sender = reaction.author ?? reaction.from;
-                            const senderUserJid = sender._serialized;
+                            normalizeKey(msgKey);
+                            normalizeKey(parentMsgKey);
+                            normalizeKey(sender);
+                            const senderUserJid =
+                                sender?._serialized ?? sender?.$1 ?? sender?.toString?.();
 
                             return {
                                 ...reaction,

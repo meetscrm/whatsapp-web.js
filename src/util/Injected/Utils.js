@@ -3,6 +3,39 @@
 exports.LoadUtils = () => {
     window.WWebJS = {};
 
+    // Compatibility shim: newer WhatsApp Web builds can expose the serialized
+    // wid/msg-key as `$1` instead of `_serialized`.
+    window.WWebJS.widSerialized = (wid) => {
+        if (!wid || typeof wid === 'string') return wid;
+        return (
+            wid._serialized ??
+            wid.$1 ??
+            (typeof wid.toString === 'function' ? wid.toString() : undefined)
+        );
+    };
+
+    // Mirror `$1` back onto `_serialized` in serialized models so node-side
+    // code keeps reading `id._serialized` as before.
+    window.WWebJS.normalizeSerialized = (obj, depth = 0) => {
+        if (!obj || typeof obj !== 'object' || depth > 8) return obj;
+        if (Array.isArray(obj)) {
+            for (const item of obj) {
+                window.WWebJS.normalizeSerialized(item, depth + 1);
+            }
+            return obj;
+        }
+        if (obj.$1 !== undefined && obj._serialized === undefined) {
+            obj._serialized = obj.$1;
+        }
+        for (const key of Object.keys(obj)) {
+            const value = obj[key];
+            if (value && typeof value === 'object') {
+                window.WWebJS.normalizeSerialized(value, depth + 1);
+            }
+        }
+        return obj;
+    };
+
     /**
      * Helper function that compares between two WWeb versions. Its purpose is to help the developer to choose the correct code implementation depending on the comparison value and the WWeb version.
      * @param {string} lOperand The left operand for the WWeb version string to compare with
@@ -582,7 +615,7 @@ exports.LoadUtils = () => {
 
         return window
             .require('WAWebCollections')
-            .Msg.get(newMsgKey._serialized);
+            .Msg.get(window.WWebJS.widSerialized(newMsgKey));
     };
 
     window.WWebJS.editMessage = async (msg, content, options = {}) => {
@@ -625,7 +658,8 @@ exports.LoadUtils = () => {
         await window
             .require('WAWebSendMessageEditAction')
             .sendMessageEdit(msg, content, internalOptions);
-        return window.require('WAWebCollections').Msg.get(msg.id._serialized);
+        const msgId = window.WWebJS.widSerialized(msg.id);
+        return window.require('WAWebCollections').Msg.get(msgId) || msg;
     };
 
     window.WWebJS.toStickerData = async (mediaInfo) => {
@@ -830,13 +864,13 @@ exports.LoadUtils = () => {
 
         if (typeof msg.id.remote === 'object') {
             msg.id = Object.assign({}, msg.id, {
-                remote: msg.id.remote._serialized,
+                remote: window.WWebJS.widSerialized(msg.id.remote),
             });
         }
 
         delete msg.pendingAckUpdate;
 
-        return msg;
+        return window.WWebJS.normalizeSerialized(msg);
     };
 
     window.WWebJS.getChat = async (chatId, { getAsModel = true } = {}) => {
@@ -953,7 +987,7 @@ exports.LoadUtils = () => {
             model.isGroup = true;
             const chatWid = window
                 .require('WAWebWidFactory')
-                .createWid(chat.id._serialized);
+                .createWid(window.WWebJS.widSerialized(chat.id));
             const groupMetadata =
                 window.require('WAWebCollections').GroupMetadata ||
                 window.require('WAWebCollections').WAWebGroupMetadataCollection;
@@ -981,28 +1015,34 @@ exports.LoadUtils = () => {
 
         model.lastMessage = null;
         if (model.msgs && model.msgs.length) {
-            const lastMessage = chat.lastReceivedKey
-                ? window
-                      .require('WAWebCollections')
-                      .Msg.get(chat.lastReceivedKey._serialized) ||
-                  (
-                      await window
-                          .require('WAWebCollections')
-                          .Msg.getMessagesById([
-                              chat.lastReceivedKey._serialized,
-                          ])
-                  )?.messages?.[0]
-                : null;
-            lastMessage &&
-                (model.lastMessage =
-                    window.WWebJS.getMessageModel(lastMessage));
+            try {
+                const lastReceivedKey = window.WWebJS.widSerialized(
+                    chat.lastReceivedKey,
+                );
+                const lastMessage = lastReceivedKey
+                    ? window.require('WAWebCollections').Msg.get(
+                          lastReceivedKey,
+                      ) ||
+                      (
+                          await window
+                              .require('WAWebCollections')
+                              .Msg.getMessagesById([lastReceivedKey])
+                      )?.messages?.[0]
+                    : null;
+                lastMessage &&
+                    (model.lastMessage =
+                        window.WWebJS.getMessageModel(lastMessage));
+            } catch (ignoredError) {
+                // lastMessage resolution is best-effort; a key-format change
+                // in WhatsApp Web must not break the whole chat model.
+            }
         }
 
         delete model.msgs;
         delete model.msgUnsyncedButtonReplyMsgs;
         delete model.unsyncedButtonReplies;
 
-        return model;
+        return window.WWebJS.normalizeSerialized(model);
     };
 
     window.WWebJS.getContactModel = (contact) => {

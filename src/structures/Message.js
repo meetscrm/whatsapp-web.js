@@ -931,7 +931,9 @@ class Message extends Base {
                         message,
                         options,
                     );
-                    return msgEdit.serialize();
+                    return msgEdit
+                        ? window.WWebJS.getMessageModel(msgEdit)
+                        : window.WWebJS.getMessageModel(msg);
                 }
                 return null;
             },

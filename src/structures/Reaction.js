@@ -14,11 +14,22 @@ class Reaction extends Base {
     }
 
     _patch(data) {
+        const normalizeKey = (key) => {
+            if (!key || typeof key === 'string') return key;
+            if (key._serialized === undefined && key.$1 !== undefined) {
+                key._serialized = key.$1;
+            }
+            return key;
+        };
+
+        const msgKey = normalizeKey(data.msgKey);
+        const parentMsgKey = normalizeKey(data.parentMsgKey);
+
         /**
          * Reaction ID
          * @type {object}
          */
-        this.id = data.msgKey;
+        this.id = msgKey;
         /**
          * Orphan
          * @type {number}
@@ -48,12 +59,12 @@ class Reaction extends Base {
          * Message ID
          * @type {object}
          */
-        this.msgId = data.parentMsgKey;
+        this.msgId = parentMsgKey;
         /**
          * Sender ID
          * @type {string}
          */
-        this.senderId = data.senderUserJid;
+        this.senderId = data.senderUserJid?._serialized ?? data.senderUserJid?.$1 ?? data.senderUserJid;
         /**
          * ACK
          * @type {?number}
