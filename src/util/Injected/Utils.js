@@ -634,13 +634,24 @@ exports.LoadUtils = () => {
         const [msgPromise, sendMsgResultPromise] = window
             .require('WAWebSendMsgChatAction')
             .addAndSendMsgToChat(chat, message);
-        await msgPromise;
+        const msg = await msgPromise;
 
-        if (options.waitUntilMsgSent) await sendMsgResultPromise;
+        const sendResultTimeout = new Promise((resolve) => {
+            setTimeout(() => resolve(null), 30000);
+        });
+
+        const sendResult = await Promise.race([
+            sendMsgResultPromise.catch(() => null),
+            sendResultTimeout,
+        ]);
+
+        if (options.waitUntilMsgSent && !sendResult) {
+            throw new Error('Message send result was not confirmed.');
+        }
 
         const Msg = window.require('WAWebCollections').Msg;
         const newMsg = Msg.get(window.WWebJS.widSerialized(newMsgKey));
-        return newMsg || Msg.get(newMsgKey) || new Msg.modelClass(message);
+        return newMsg || Msg.get(newMsgKey) || msg || null;
     };
 
     window.WWebJS.editMessage = async (msg, content, options = {}) => {
