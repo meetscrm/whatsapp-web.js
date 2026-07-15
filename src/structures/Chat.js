@@ -3,6 +3,54 @@
 const Base = require('./Base');
 const Message = require('./Message');
 
+const widSerialized = (wid) => {
+    if (!wid) return wid;
+    if (typeof wid === 'string') return wid;
+    if (typeof wid !== 'object') return String(wid);
+
+    if (wid._serialized) return wid._serialized;
+    if (typeof wid.toString === 'function') {
+        const serialized = wid.toString();
+        if (serialized && serialized !== '[object Object]') {
+            return serialized;
+        }
+    }
+
+    if (wid.user && wid.server) {
+        return `${wid.user}@${wid.server}`;
+    }
+
+    if (wid.$1) {
+        return widSerialized(wid.$1);
+    }
+
+    return wid;
+};
+
+const normalizeSerialized = (obj, depth = 0) => {
+    if (!obj || depth > 8) return obj;
+
+    if (Array.isArray(obj)) {
+        return obj.map((item) => normalizeSerialized(item, depth + 1));
+    }
+
+    if (typeof obj !== 'object') return obj;
+
+    if (typeof obj._serialized !== 'string') {
+        const serialized = widSerialized(obj);
+        if (typeof serialized === 'string') {
+            obj._serialized = serialized;
+        }
+    }
+
+    for (const key of Object.keys(obj)) {
+        if (key === '_serialized') continue;
+        obj[key] = normalizeSerialized(obj[key], depth + 1);
+    }
+
+    return obj;
+};
+
 /**
  * Represents a Chat on WhatsApp
  * @extends {Base}
@@ -15,6 +63,7 @@ class Chat extends Base {
     }
 
     _patch(data) {
+        normalizeSerialized(data);
         /**
          * ID that represents the chat
          * @type {object}

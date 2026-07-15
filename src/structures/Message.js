@@ -11,6 +11,54 @@ const Contact = require('./Contact');
 const ScheduledEvent = require('./ScheduledEvent'); // eslint-disable-line no-unused-vars
 const { MessageTypes } = require('../util/Constants');
 
+const widSerialized = (wid) => {
+    if (!wid) return wid;
+    if (typeof wid === 'string') return wid;
+    if (typeof wid !== 'object') return String(wid);
+
+    if (wid._serialized) return wid._serialized;
+    if (typeof wid.toString === 'function') {
+        const serialized = wid.toString();
+        if (serialized && serialized !== '[object Object]') {
+            return serialized;
+        }
+    }
+
+    if (wid.user && wid.server) {
+        return `${wid.user}@${wid.server}`;
+    }
+
+    if (wid.$1) {
+        return widSerialized(wid.$1);
+    }
+
+    return wid;
+};
+
+const normalizeSerialized = (obj, depth = 0) => {
+    if (!obj || depth > 8) return obj;
+
+    if (Array.isArray(obj)) {
+        return obj.map((item) => normalizeSerialized(item, depth + 1));
+    }
+
+    if (typeof obj !== 'object') return obj;
+
+    if (typeof obj._serialized !== 'string') {
+        const serialized = widSerialized(obj);
+        if (typeof serialized === 'string') {
+            obj._serialized = serialized;
+        }
+    }
+
+    for (const key of Object.keys(obj)) {
+        if (key === '_serialized') continue;
+        obj[key] = normalizeSerialized(obj[key], depth + 1);
+    }
+
+    return obj;
+};
+
 /**
  * Represents a Message on WhatsApp
  * @extends {Base}
@@ -23,6 +71,7 @@ class Message extends Base {
     }
 
     _patch(data) {
+        normalizeSerialized(data);
         this._data = data;
 
         /**
@@ -75,7 +124,7 @@ class Message extends Base {
          */
         this.from =
             typeof data.from === 'object' && data.from !== null
-                ? data.from._serialized
+                ? widSerialized(data.from)
                 : data.from;
 
         /**
@@ -87,7 +136,7 @@ class Message extends Base {
          */
         this.to =
             typeof data.to === 'object' && data.to !== null
-                ? data.to._serialized
+                ? widSerialized(data.to)
                 : data.to;
 
         /**
@@ -96,7 +145,7 @@ class Message extends Base {
          */
         this.author =
             typeof data.author === 'object' && data.author !== null
-                ? data.author._serialized
+                ? widSerialized(data.author)
                 : data.author;
 
         /**
