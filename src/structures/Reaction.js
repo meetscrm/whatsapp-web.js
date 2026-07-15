@@ -64,7 +64,10 @@ class Reaction extends Base {
          * Sender ID
          * @type {string}
          */
-        this.senderId = data.senderUserJid?._serialized ?? data.senderUserJid?.$1 ?? data.senderUserJid;
+        this.senderId =
+            data.senderUserJid?._serialized ??
+            data.senderUserJid?.$1 ??
+            data.senderUserJid;
         /**
          * ACK
          * @type {?number}

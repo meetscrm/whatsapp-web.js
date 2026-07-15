@@ -1020,9 +1020,9 @@ exports.LoadUtils = () => {
                     chat.lastReceivedKey,
                 );
                 const lastMessage = lastReceivedKey
-                    ? window.require('WAWebCollections').Msg.get(
-                          lastReceivedKey,
-                      ) ||
+                    ? window
+                          .require('WAWebCollections')
+                          .Msg.get(lastReceivedKey) ||
                       (
                           await window
                               .require('WAWebCollections')

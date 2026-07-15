@@ -201,21 +201,28 @@ class Chat extends Base {
      * @returns {Promise<Array<Message>>}
      */
     async fetchMessages(searchOptions) {
-        let messages = await this.client.pupPage.evaluate(async (chatId, searchOptions) => {
-            const msgFilter = (m) => {
-                if (m.isNotification) {
-                    return false; // dont include notification messages
-                }
-                if (searchOptions && searchOptions.fromMe !== undefined && m.id.fromMe !== searchOptions.fromMe) {
-                    return false;
-                }
-                return true;
-            };
+        let messages = await this.client.pupPage.evaluate(
+            async (chatId, searchOptions) => {
+                const msgFilter = (m) => {
+                    if (m.isNotification) {
+                        return false; // dont include notification messages
+                    }
+                    if (
+                        searchOptions &&
+                        searchOptions.fromMe !== undefined &&
+                        m.id.fromMe !== searchOptions.fromMe
+                    ) {
+                        return false;
+                    }
+                    return true;
+                };
 
-            const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
-            let msgs = chat.msgs.getModelsArray().filter(msgFilter);
+                const chat = await window.WWebJS.getChat(chatId, {
+                    getAsModel: false,
+                });
+                let msgs = chat.msgs.getModelsArray().filter(msgFilter);
 
-            if (searchOptions && searchOptions.limit > 0) {
+                if (searchOptions && searchOptions.limit > 0) {
                     const msgFindLocal = window.require(
                         'WAWebDBMessageFindLocal',
                     );
@@ -270,7 +277,7 @@ class Chat extends Base {
                             if (!model && m && MsgStore.modelClass) {
                                 try {
                                     model = new MsgStore.modelClass(m);
-                                } catch (e) {
+                                } catch (ignoredError) {
                                     model = null;
                                 }
                             }
@@ -390,13 +397,15 @@ class Chat extends Base {
                             msgs = msgs.slice(-limit);
                         }
                     }
-            }
+                }
 
-            return msgs.map(m => window.WWebJS.getMessageModel(m));
+                return msgs.map((m) => window.WWebJS.getMessageModel(m));
+            },
+            this.id._serialized,
+            searchOptions,
+        );
 
-        }, this.id._serialized, searchOptions);
-
-        return messages.map(m => new Message(this.client, m));
+        return messages.map((m) => new Message(this.client, m));
     }
 
     /**

@@ -1232,7 +1232,10 @@ class Client extends EventEmitter {
                         args[0].map((reaction) => {
                             const normalizeKey = (key) => {
                                 if (!key || typeof key === 'string') return key;
-                                if (key._serialized === undefined && key.$1 !== undefined) {
+                                if (
+                                    key._serialized === undefined &&
+                                    key.$1 !== undefined
+                                ) {
                                     key._serialized = key.$1;
                                 }
                                 return key;
@@ -1246,7 +1249,9 @@ class Client extends EventEmitter {
                             normalizeKey(parentMsgKey);
                             normalizeKey(sender);
                             const senderUserJid =
-                                sender?._serialized ?? sender?.$1 ?? sender?.toString?.();
+                                sender?._serialized ??
+                                sender?.$1 ??
+                                sender?.toString?.();
 
                             return {
                                 ...reaction,
