@@ -545,6 +545,13 @@ class Client extends EventEmitter {
         this.pupBrowser = browser;
         this.pupPage = page;
 
+        page.on('console', (message) => {
+            const text = message.text();
+            if (text.includes('[WWebJS:')) {
+                console.log(`[WWebJS:BROWSER:${message.type()}] ${text}`);
+            }
+        });
+
         await this.authStrategy.afterBrowserInitialized();
         await this.initWebVersionCache();
 
