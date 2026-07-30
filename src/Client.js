@@ -302,6 +302,15 @@ class Client extends EventEmitter {
                         return typeof window.WWebJS !== 'undefined';
                     });
 
+                    let listenersActive = false;
+                    if (injected) {
+                        listenersActive = await this.pupPage.evaluate(() => {
+                            return (
+                                typeof window.onAddMessageEvent !== 'undefined'
+                            );
+                        });
+                    }
+
                     if (!injected) {
                         if (
                             this.options.webVersionCache.type === 'local' &&
@@ -355,8 +364,19 @@ class Client extends EventEmitter {
                         );
 
                         this.interface = new InterfaceController(this);
+                    }
 
+                    if (!injected || !listenersActive) {
+                        if (injected && !listenersActive) {
+                            console.log(
+                                '[WWebJS:CONN] window.WWebJS exists but listeners not active, re-attaching',
+                            );
+                        }
                         await this.attachEventListeners();
+                    } else {
+                        console.log(
+                            '[WWebJS:CONN] attachEventListeners skipped because window.WWebJS already exists and listeners are active',
+                        );
                     }
                     /**
                      * Emitted when the client has initialized and is ready to receive messages.
@@ -388,6 +408,7 @@ class Client extends EventEmitter {
                 },
             );
             await this.pupPage.evaluate(() => {
+                let oldState = 'UNKNOWN';
                 const Socket = window.require('WAWebSocketModel').Socket;
                 const Cmd = window.require('WAWebCmd').Cmd;
 
@@ -396,6 +417,13 @@ class Client extends EventEmitter {
                         Socket,
                         'change:state',
                         (_AppState, state) => {
+                            console.log(
+                                '[WWebJS:CONN] AppState changed from',
+                                oldState,
+                                'to',
+                                state,
+                            );
+                            oldState = state;
                             window.onAuthAppStateChangedEvent(state);
                         },
                     ],
@@ -516,6 +544,13 @@ class Client extends EventEmitter {
 
         this.pupBrowser = browser;
         this.pupPage = page;
+
+        page.on('console', (message) => {
+            const text = message.text();
+            if (text.includes('[WWebJS:')) {
+                console.log(`[WWebJS:BROWSER:${message.type()}] ${text}`);
+            }
+        });
 
         await this.authStrategy.afterBrowserInitialized();
         await this.initWebVersionCache();
@@ -640,85 +675,120 @@ class Client extends EventEmitter {
      * @property {boolean} reinject is this a reinject?
      */
     async attachEventListeners() {
+        console.log('[WWebJS:CONN] attachEventListeners called');
+
         await exposeFunctionIfAbsent(
             this.pupPage,
             'onAddMessageEvent',
             (msg) => {
-                if (msg.type === 'gp2') {
-                    const notification = new GroupNotification(this, msg);
-                    if (
-                        ['add', 'invite', 'linked_group_join'].includes(
-                            msg.subtype,
-                        )
-                    ) {
-                        /**
-                         * Emitted when a user joins the chat via invite link or is added by an admin.
-                         * @event Client#group_join
-                         * @param {GroupNotification} notification GroupNotification with more information about the action
-                         */
-                        this.emit(Events.GROUP_JOIN, notification);
-                    } else if (
-                        msg.subtype === 'remove' ||
-                        msg.subtype === 'leave'
-                    ) {
-                        /**
-                         * Emitted when a user leaves the chat or is removed by an admin.
-                         * @event Client#group_leave
-                         * @param {GroupNotification} notification GroupNotification with more information about the action
-                         */
-                        this.emit(Events.GROUP_LEAVE, notification);
-                    } else if (
-                        msg.subtype === 'promote' ||
-                        msg.subtype === 'demote'
-                    ) {
-                        /**
-                         * Emitted when a current user is promoted to an admin or demoted to a regular user.
-                         * @event Client#group_admin_changed
-                         * @param {GroupNotification} notification GroupNotification with more information about the action
-                         */
-                        this.emit(Events.GROUP_ADMIN_CHANGED, notification);
-                    } else if (msg.subtype === 'membership_approval_request') {
-                        /**
-                         * Emitted when some user requested to join the group
-                         * that has the membership approval mode turned on
-                         * @event Client#group_membership_request
-                         * @param {GroupNotification} notification GroupNotification with more information about the action
-                         * @param {string} notification.chatId The group ID the request was made for
-                         * @param {string} notification.author The user ID that made a request
-                         * @param {number} notification.timestamp The timestamp the request was made at
-                         */
-                        this.emit(
-                            Events.GROUP_MEMBERSHIP_REQUEST,
-                            notification,
-                        );
-                    } else {
-                        /**
-                         * Emitted when group settings are updated, such as subject, description or picture.
-                         * @event Client#group_update
-                         * @param {GroupNotification} notification GroupNotification with more information about the action
-                         */
-                        this.emit(Events.GROUP_UPDATE, notification);
+                try {
+                    console.log(
+                        '[WWebJS:MSG] onAddMessageEvent received:',
+                        msg.id?.id || msg.id,
+                    );
+                    if (msg.type === 'gp2') {
+                        const notification = new GroupNotification(this, msg);
+                        if (
+                            ['add', 'invite', 'linked_group_join'].includes(
+                                msg.subtype,
+                            )
+                        ) {
+                            /**
+                             * Emitted when a user joins the chat via invite link or is added by an admin.
+                             * @event Client#group_join
+                             * @param {GroupNotification} notification GroupNotification with more information about the action
+                             */
+                            this.emit(Events.GROUP_JOIN, notification);
+                        } else if (
+                            msg.subtype === 'remove' ||
+                            msg.subtype === 'leave'
+                        ) {
+                            /**
+                             * Emitted when a user leaves the chat or is removed by an admin.
+                             * @event Client#group_leave
+                             * @param {GroupNotification} notification GroupNotification with more information about the action
+                             */
+                            this.emit(Events.GROUP_LEAVE, notification);
+                        } else if (
+                            msg.subtype === 'promote' ||
+                            msg.subtype === 'demote'
+                        ) {
+                            /**
+                             * Emitted when a current user is promoted to an admin or demoted to a regular user.
+                             * @event Client#group_admin_changed
+                             * @param {GroupNotification} notification GroupNotification with more information about the action
+                             */
+                            this.emit(Events.GROUP_ADMIN_CHANGED, notification);
+                        } else if (
+                            msg.subtype === 'membership_approval_request'
+                        ) {
+                            /**
+                             * Emitted when some user requested to join the group
+                             * that has the membership approval mode turned on
+                             * @event Client#group_membership_request
+                             * @param {GroupNotification} notification GroupNotification with more information about the action
+                             * @param {string} notification.chatId The group ID the request was made for
+                             * @param {string} notification.author The user ID that made a request
+                             * @param {number} notification.timestamp The timestamp the request was made at
+                             */
+                            this.emit(
+                                Events.GROUP_MEMBERSHIP_REQUEST,
+                                notification,
+                            );
+                        } else {
+                            /**
+                             * Emitted when group settings are updated, such as subject, description or picture.
+                             * @event Client#group_update
+                             * @param {GroupNotification} notification GroupNotification with more information about the action
+                             */
+                            this.emit(Events.GROUP_UPDATE, notification);
+                        }
+                        return;
                     }
-                    return;
+
+                    const message = new Message(this, msg);
+
+                    /**
+                     * Emitted when a new message is created, which may include the current user's own messages.
+                     * @event Client#message_create
+                     * @param {Message} message The message that was created
+                     */
+                    this.emit(Events.MESSAGE_CREATE, message);
+
+                    if (msg.id.fromMe) return;
+
+                    /**
+                     * Emitted when a new message is received.
+                     * @event Client#message
+                     * @param {Message} message The message that was received
+                     */
+                    this.emit(Events.MESSAGE_RECEIVED, message);
+                } catch (e) {
+                    console.error(
+                        '[WWebJS:MSG] Error in onAddMessageEvent:',
+                        e,
+                    );
                 }
+            },
+        );
 
-                const message = new Message(this, msg);
-
-                /**
-                 * Emitted when a new message is created, which may include the current user's own messages.
-                 * @event Client#message_create
-                 * @param {Message} message The message that was created
-                 */
-                this.emit(Events.MESSAGE_CREATE, message);
-
-                if (msg.id.fromMe) return;
-
-                /**
-                 * Emitted when a new message is received.
-                 * @event Client#message
-                 * @param {Message} message The message that was received
-                 */
-                this.emit(Events.MESSAGE_RECEIVED, message);
+        await exposeFunctionIfAbsent(
+            this.pupPage,
+            'onSyncMessageEvent',
+            (msg) => {
+                try {
+                    console.log(
+                        '[WWebJS:MSG] onSyncMessageEvent received:',
+                        msg.id?.id || msg.id,
+                    );
+                    const message = new Message(this, msg);
+                    this.emit(Events.MESSAGE_SYNC, message);
+                } catch (e) {
+                    console.error(
+                        '[WWebJS:MSG] Error in onSyncMessageEvent:',
+                        e,
+                    );
+                }
             },
         );
 
@@ -1184,39 +1254,78 @@ class Client extends EventEmitter {
             }
 
             Msg.on('add', (msg) => {
-                if (!msg.isNewMsg) return;
+                try {
+                    console.log(
+                        '[WWebJS:MSG] Msg.add event:',
+                        msg.id?.id,
+                        'type:',
+                        msg.type,
+                        'isNewMsg:',
+                        msg.isNewMsg,
+                    );
 
-                if (msg.type !== 'ciphertext') {
-                    window.onAddMessageEvent(
+                    if (!msg.isNewMsg) {
+                        console.log(
+                            '[WWebJS:MSG] Skipped non-new message:',
+                            msg.id?.id,
+                            'type:',
+                            msg.type,
+                            'isNewMsg:',
+                            msg.isNewMsg,
+                        );
+                        if (msg.type !== 'ciphertext') {
+                            window.onSyncMessageEvent(
+                                window.WWebJS.getMessageModel(msg),
+                            );
+                        }
+                        return;
+                    }
+
+                    if (msg.type !== 'ciphertext') {
+                        window.onAddMessageEvent(
+                            window.WWebJS.getMessageModel(msg),
+                        );
+                        return;
+                    }
+
+                    console.log(
+                        '[WWebJS:MSG] Ciphertext message detected:',
+                        msg.id?.id,
+                    );
+                    window.onAddMessageCiphertextEvent(
                         window.WWebJS.getMessageModel(msg),
                     );
-                    return;
+
+                    if (
+                        msg.subtype &&
+                        msg.subtype.endsWith('_unavailable_fanout')
+                    )
+                        return;
+
+                    requestResend(msg);
+
+                    const failTimer = setTimeout(() => {
+                        if (msg.type !== 'ciphertext') return;
+                        console.log(
+                            '[WWebJS:MSG] Ciphertext decryption timed out:',
+                            msg.id?.id,
+                        );
+                        window.onCiphertextFailedEvent(
+                            window.WWebJS.getMessageModel(msg),
+                        );
+                    }, 15000);
+
+                    msg.once('change:type', (_msg) => {
+                        clearTimeout(failTimer);
+                        pendingResend.delete(_msg);
+                        if (_msg.type === 'revoked') return;
+                        window.onAddMessageEvent(
+                            window.WWebJS.getMessageModel(_msg),
+                        );
+                    });
+                } catch (e) {
+                    console.error('[WWebJS:MSG] Error processing message:', e);
                 }
-
-                window.onAddMessageCiphertextEvent(
-                    window.WWebJS.getMessageModel(msg),
-                );
-
-                if (msg.subtype && msg.subtype.endsWith('_unavailable_fanout'))
-                    return;
-
-                requestResend(msg);
-
-                const failTimer = setTimeout(() => {
-                    if (msg.type !== 'ciphertext') return;
-                    window.onCiphertextFailedEvent(
-                        window.WWebJS.getMessageModel(msg),
-                    );
-                }, 15000);
-
-                msg.once('change:type', (_msg) => {
-                    clearTimeout(failTimer);
-                    pendingResend.delete(_msg);
-                    if (_msg.type === 'revoked') return;
-                    window.onAddMessageEvent(
-                        window.WWebJS.getMessageModel(_msg),
-                    );
-                });
             });
             Chat.on('change:unreadCount', (chat) => {
                 window.onChatUnreadCountEvent(chat);
@@ -1230,11 +1339,28 @@ class Client extends EventEmitter {
                 (module, origFunction, ...args) => {
                     window.onReaction(
                         args[0].map((reaction) => {
+                            const normalizeKey = (key) => {
+                                if (!key || typeof key === 'string') return key;
+                                if (
+                                    key._serialized === undefined &&
+                                    key.$1 !== undefined
+                                ) {
+                                    key._serialized = key.$1;
+                                }
+                                return key;
+                            };
+
                             const msgKey = reaction.id;
                             const parentMsgKey = reaction.reactionParentKey;
                             const timestamp = reaction.reactionTimestamp / 1000;
                             const sender = reaction.author ?? reaction.from;
-                            const senderUserJid = sender._serialized;
+                            normalizeKey(msgKey);
+                            normalizeKey(parentMsgKey);
+                            normalizeKey(sender);
+                            const senderUserJid =
+                                sender?._serialized ??
+                                sender?.$1 ??
+                                sender?.toString?.();
 
                             return {
                                 ...reaction,

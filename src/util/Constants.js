@@ -53,6 +53,7 @@ exports.Events = {
     MESSAGE_CIPHERTEXT: 'message_ciphertext',
     MESSAGE_CIPHERTEXT_FAILED: 'message_ciphertext_failed',
     MESSAGE_CREATE: 'message_create',
+    MESSAGE_SYNC: 'message_sync',
     MESSAGE_REVOKED_EVERYONE: 'message_revoke_everyone',
     MESSAGE_REVOKED_ME: 'message_revoke_me',
     MESSAGE_ACK: 'message_ack',
