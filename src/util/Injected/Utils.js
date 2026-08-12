@@ -1015,11 +1015,12 @@ exports.LoadUtils = () => {
 
         model.lastMessage = null;
         if (model.msgs && model.msgs.length) {
+            let lastMessage = null;
             try {
                 const lastReceivedKey = window.WWebJS.widSerialized(
                     chat.lastReceivedKey,
                 );
-                const lastMessage = lastReceivedKey
+                lastMessage = lastReceivedKey
                     ? window
                           .require('WAWebCollections')
                           .Msg.get(lastReceivedKey) ||
@@ -1029,12 +1030,25 @@ exports.LoadUtils = () => {
                               .Msg.getMessagesById([lastReceivedKey])
                       )?.messages?.[0]
                     : null;
-                lastMessage &&
-                    (model.lastMessage =
-                        window.WWebJS.getMessageModel(lastMessage));
             } catch (ignoredError) {
                 // lastMessage resolution is best-effort; a key-format change
                 // in WhatsApp Web must not break the whole chat model.
+            }
+
+            if (!lastMessage) {
+                const loadedMessages =
+                    chat.msgs?.getModelsArray?.() || chat.msgs?._models || [];
+                lastMessage = loadedMessages.reduce((latest, message) => {
+                    if (!latest) return message;
+                    return (message?.t || message?.timestamp || 0) >=
+                        (latest?.t || latest?.timestamp || 0)
+                        ? message
+                        : latest;
+                }, null);
+            }
+
+            if (lastMessage) {
+                model.lastMessage = window.WWebJS.getMessageModel(lastMessage);
             }
         }
 
