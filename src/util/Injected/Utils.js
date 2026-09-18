@@ -143,6 +143,72 @@ exports.LoadUtils = () => {
         },
     );
 
+    window.WWebJS.getForwardMessageModule = async () => {
+        const getModule = () => {
+            try {
+                return window.require('WAWebChatForwardMessage');
+            } catch {
+                return null;
+            }
+        };
+
+        let forwardModule = getModule();
+        if (typeof forwardModule?.forwardMessages === 'function') {
+            return forwardModule;
+        }
+
+        let bootloader;
+        try {
+            const bootloaderModule = window.require('Bootloader');
+            bootloader =
+                typeof bootloaderModule?.loadModules === 'function'
+                    ? bootloaderModule
+                    : bootloaderModule?.default;
+        } catch {
+            bootloader = null;
+        }
+
+        if (typeof bootloader?.loadModules !== 'function') {
+            throw new Error('Módulo de encaminhamento indisponível no WhatsApp Web');
+        }
+
+        const components = [
+            'WAWebMediaForwardMediaMsg',
+            'WAWebForwardMessageFlow.react',
+            'WAWebForwardMessageModal.react',
+        ];
+
+        for (const component of components) {
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(
+                    () => reject(new Error(`Tempo esgotado ao carregar ${component}`)),
+                    30000,
+                );
+
+                try {
+                    bootloader.loadModules(
+                        [component],
+                        () => {
+                            clearTimeout(timeout);
+                            resolve();
+                        },
+                        'WWebJS',
+                    );
+                } catch (error) {
+                    clearTimeout(timeout);
+                    reject(error);
+                }
+            });
+
+            forwardModule = getModule();
+            if (typeof forwardModule?.forwardMessages === 'function') {
+                return forwardModule;
+            }
+        }
+
+        throw new Error('Função de encaminhamento não foi carregada pelo WhatsApp Web');
+    };
+
     window.WWebJS.forwardMessage = async (chatId, msgId) => {
         const msg =
             window.require('WAWebCollections').Msg.get(msgId) ||
@@ -152,13 +218,24 @@ exports.LoadUtils = () => {
                     .Msg.getMessagesById([msgId])
             )?.messages?.[0];
         const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
-        return await window.require('WAWebChatForwardMessage').forwardMessages({
+        if (!msg || !chat) {
+            throw new Error('Mensagem ou conversa não encontrada para encaminhamento');
+        }
+
+        const forwardModule = await window.WWebJS.getForwardMessageModule();
+        const result = await forwardModule.forwardMessages({
             chat: chat,
             msgs: [msg],
             multicast: true,
             includeCaption: true,
             appendedText: undefined,
         });
+
+        if (Array.isArray(result) && result.length) {
+            throw new Error('O WhatsApp não encaminhou uma ou mais mensagens');
+        }
+
+        return result;
     };
 
     window.WWebJS.sendSeen = async (chatId) => {
